@@ -1,6 +1,6 @@
 import numpy as np
 import math
-
+import time
 
 
 class Atom:
@@ -376,6 +376,15 @@ def vdw_read(angle_list,bnd):
 
 
 def internal_read(bnd):
+    """Read internal coordinates from a file and return lists 
+
+    Args:
+        bnd (array(bonds,2)): bond list
+
+    Returns:
+        bond_list, angle_list, dihedral_list : lists of objects
+        internal_list : list of internal coordinates
+    """
     bond_list = bond_read(bnd)[1]
     angle_list = angle_read(bnd)
     dihedral_list = dihedral_read(angle_list) 
@@ -768,7 +777,7 @@ def linear_search(coord,p_k,atoms,g_initial,V0):
 
 
 def step(coord,alpha,p_k,atoms,bnd):
-    """_summary_
+    """Makes a step in cartesian coordinates 
 
     Args:
         coord (array(nat,3)): set of coordinates to optimize
@@ -796,7 +805,17 @@ def step(coord,alpha,p_k,atoms,bnd):
 
 
 def Bmat(bond_list,angle_list,dihedral_list ):
-    B = np.zeros((internal_coordinates,3*nat),dtype=float)
+    """Function for building Wilson's B-matrix
+
+    Args:
+        bond_list (list of objects): previously obtained list of bonds in bond_read
+        angle_list (list of objects): previously obtained list of angles in angle_read
+        dihedral_list (list of objects): previously obtained list of dihedral in dihedral_read
+
+    Returns:
+        array(internal coords * cartesian coords): Wilson B-matrix
+    """
+    B = np.zeros((internal_coordinates,3*nat),dtype=float) 
 
     row = 0 # Counts which row to substitute data
     for i in bond_list:
@@ -824,6 +843,15 @@ def Bmat(bond_list,angle_list,dihedral_list ):
 
 
 def inverse_G(B):
+    """Calculate the generalized inverse matrix G
+
+    Args:
+        B (array): Wilson B-matrix
+
+    Returns:
+        array (internal coordinates * internal coordinates): inverse G matrix
+    """
+
     G = np.dot(B,B.T)
 
         # Diagonalize G and get the inverse
@@ -852,72 +880,31 @@ def inverse_G(B):
 
 
 def update_Hessian(Mq,sqk,yqk,vqk):
+    """Update inverse Hessian matrix in internal coordinates
+
+    Args:
+        Mq (array): previous guess for the Hessian 
+        sqk (array): difference between internals
+        yqk (array): difference in gradient
+        vqk (array): vector vqk
+
+    Returns:
+        array (internal coordinates * internal coordinates): new inverse Hessian matrix
+    """
 
     sqk = np.array(sqk).reshape((internal_coordinates,1))
 
     Mq1 = Mq + (np.dot(sqk.T,yqk) + np.dot(yqk.T,vqk)) / ((np.dot(sqk.T,yqk))**2)  * np.outer(sqk,sqk)   - (np.outer(vqk,sqk) + np.outer(sqk,vqk)) / np.dot(sqk.T,yqk)
 
-    print(np.dot(sqk.T,yqk))
 
-    # dot = 0
-    # for i in range(len(sqk)):
-    #     dot += sqk[i]*yqk[i]
-    # print(f'Dot product sk*yk = {np.dot(sqk,yqk)}')
-    # print(f'Try function: {dot}')
+
+ 
 
     return Mq1
 
 
 
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
-
-
-
-if __name__ == '__main__':
-    
-    filename = input('Choose a .mol2 file: \n')  # Load molecule
-
-
-    # Next read  bonded atoms list, coordinates, element of each atom and number of atoms
-
-    bnd = read_file(filename)[0]
-    coord = read_file(filename)[1]
-    element = read_file(filename)[2]
-    nat = read_file(filename)[3]
-
-    # Assign values for each object in the class and append in a list
-
-    atoms = []
-    for i in range(len(coord)):
-        atoms.append(Atom(i+1,element[i],coord[i,0],coord[i,1],coord[i,2]))
-
-
-    # Get bonds,angles, dihedral angles and dispersive interactions
-
-    bond_list = bond_read(bnd)[1]
-    angle_list = angle_read(bnd)
-    dihedral_list = dihedral_read(angle_list)
-    vdw_list = vdw_read(angle_list,bnd)
-
-
-    internal_coordinates = len(bond_list)+len(angle_list)+len(dihedral_list)  #Number of total internal coordinates
-
-    print(f'Internal coordinates')
-    print('--------------------')  
-    print(f' Stretching : {len(bond_list)} \n Bending : {len(angle_list)} \n Torsion : {len(dihedral_list)} \n Total : {internal_coordinates}' )
-    print(' ')
-    print(f'Cartesian coordinates')
-    print('--------------------')
-    print(f' Total: {3*nat}')
-
-
-
-    
-    
-    ##################################################
-    # Geometry optimization in cartesian coordinates #
-    ##################################################
-
+def cartesian_opt(bond_list,angle_list,dihedral_list,vdw_list):
 
     # Start by calculating potential energy contributions and total potential energy
 
@@ -926,6 +913,8 @@ if __name__ == '__main__':
     vtors = calc_vtors(dihedral_list)
     vvdw = calc_vvdw(vdw_list)
     
+    #### Print potential energy contributions
+
     V0 = getV(bnd)
 
     print(' ')
@@ -935,141 +924,165 @@ if __name__ == '__main__':
     # Get initial gradient matrix
 
     g_initial = getgrad(bond_list,angle_list,dihedral_list,vdw_list)
- 
 
-    # print(' ')
-    # print('Initial gradient matrix')
-    # print('------------------------')
-    # [print(atoms[i].element, g_initial[i]) for i in range(len(atoms))]
+    # Define the inverse Hessian as a diagonal matrix with values 1/300
 
-
-    # # Define the inverse Hessian as a diagonal matrix with values 1/300
-
-    # M_k = np.zeros((3*nat,3*nat),dtype=float) # Approximate inverse Hessian
-    # for i in range(len(M_k)):
-    #     M_k[i][i] += 1/300
+    M_k = np.zeros((3*nat,3*nat),dtype=float) # Approximate inverse Hessian
+    for i in range(len(M_k)):
+        M_k[i][i] += 1/300
 
 
-    # # Set initial direction of max displacement 
+    # Set initial direction of max displacement 
 
-    # p_k = -np.dot(M_k,g_initial.reshape(3*nat,1)) 
+    p_k = -np.dot(M_k,g_initial.reshape(3*nat,1)) 
     
 
     
 
     
         
-    ################# Optimization algorithm #######################
+    ################ Optimization algorithm #######################
  
     # Set previously calculated initial variables so that they enter the loop and can be updated
 
-    # rold = coord
-    # Vold = V0
-    # gold = g_initial
-    # Mold = M_k
-    # count = 1 # Index
+    rold = coord
+    Vold = V0
+    gold = g_initial
+    Mold = M_k
 
-    # while True:
-    #     print(' ')
-    #     print('#############################################')
-    #     print(f'Geometry optimization: cycle number {count}')
-    #     print('#############################################')
+    cycle = 1 # Index
 
-    #     print(' ')
-    #     print('Initial geometry')
-    #     print('------------------------')
-    #     print(rold)
+    while True:
+        start_time = time.time()
+        print(' ')
+        print('#############################################')
+        print(f'Geometry optimization: cycle number {cycle}')
+        print('#############################################')
 
-    #     print(' ')
-    #     print('Cartesian displacement')
-    #     print('------------------------')
-    #     print(p_k.reshape(nat,3))
+        print(' ')
+        print('Initial geometry')
+        print('------------------------')
+        print(rold)
 
-    #     alpha = linear_search(rold,p_k,atoms,gold,Vold) #Calculate alpha at each cycle
-    #     print(f'Linear search: alpha = {alpha}')
+        print(' ')
+        print('Cartesian displacement')
+        print('------------------------')
+        print(p_k.reshape(nat,3))
 
-    #     Vnew = step(rold,alpha,p_k,atoms,bnd)[0]
-    #     rnew = step(rold,alpha,p_k,atoms,bnd)[1]
+        alpha = linear_search(rold,p_k,atoms,gold,Vold) #Calculate alpha at each cycle
+        print(f'Linear search: alpha = {alpha}')
 
-    #     # After updating the coordinates for each object, define new lists
+        Vnew = step(rold,alpha,p_k,atoms,bnd)[0]
+        rnew = step(rold,alpha,p_k,atoms,bnd)[1]
 
-    #     bond = bond_read(bnd)[1]
-    #     ang = angle_read(bnd)
-    #     dih = dihedral_read(angle_list)
-    #     vdw = vdw_read(angle_list,bnd)
+        # After updating the coordinates for each object, define new lists
 
-    #     gnew = getgrad(bond,ang,dih,vdw)
+        bond = bond_read(bnd)[1]
+        ang = angle_read(bnd)
+        dih = dihedral_read(angle_list)
+        vdw = vdw_read(angle_list,bnd)
+
+        gnew = getgrad(bond,ang,dih,vdw)
         
 
-    #     grms = np.sqrt(np.dot(gnew.reshape((1,3*nat)),gnew.reshape((3*nat,1))) / (3*nat)) # Gradient root mean square. 
+        grms = np.sqrt(np.dot(gnew.reshape((1,3*nat)),gnew.reshape((3*nat,1))) / (3*nat)) # Gradient root mean square. 
         
 
-    #     print(' ')
-    #     print(f'New set of coordinates')
-    #     print('------------------------')
-    #     print(rnew)
+        print(' ')
+        print(f'New set of coordinates')
+        print('------------------------')
+        print(rnew)
 
         
-    #     print(' ')
-    #     print('Updated gradient')
-    #     print('------------------------')
-    #     print(gnew)
+        print(' ')
+        print('Updated gradient')
+        print('------------------------')
+        print(gnew)
 
-    #     print(' ')
-    #     print(f'Energy difference = {Vnew-Vold} kcal/mol')       
-    #     print(f'Gradient root mean square deviation (GRMS) = {grms}')
-
-
+        print(' ')
+        print(f'Energy difference = {Vnew-Vold} kcal/mol')       
+        print(f'Gradient root mean square deviation (GRMS) = {grms}')
 
 
 
-    #     if grms > 0.001:  
+
+
+        if grms > 0.001:  
             
-    #         s_k = alpha*p_k  # Scaled step (3*nat,1)
+            s_k = alpha*p_k  # Scaled step (3*nat,1)
             
-    #         y_k = gnew - gold  # Gradient difference (nat,3)
+            y_k = gnew - gold  # Gradient difference (nat,3)
             
-    #         v_k = np.dot(Mold,y_k.reshape((3*nat,1))) # (3*nat,1)
+            v_k = np.dot(Mold,y_k.reshape((3*nat,1))) # (3*nat,1)
             
-    #         # Calculate the new Hessian matrix
+            # Calculate the new Hessian matrix
 
-    #         M_new = Mold + (np.outer((np.dot(s_k.T,y_k.reshape((3*nat,1))) + np.dot(y_k.reshape((1,3*nat)),v_k) )* s_k, s_k)) / (np.dot(s_k.T,y_k.reshape((3*nat,1)))**2) - (np.outer(v_k,s_k.T) + np.outer(s_k,v_k.T)) / (np.dot(s_k.T,y_k.reshape((3*nat,1))))
+            M_new = Mold + (np.outer((np.dot(s_k.T,y_k.reshape((3*nat,1))) + np.dot(y_k.reshape((1,3*nat)),v_k) )* s_k, s_k)) / (np.dot(s_k.T,y_k.reshape((3*nat,1)))**2) - (np.outer(v_k,s_k.T) + np.outer(s_k,v_k.T)) / (np.dot(s_k.T,y_k.reshape((3*nat,1))))
 
-    #         # Update variables so that the calculated become the old ones
+            # Update variables so that the calculated become the old ones
 
-    #         rold = rnew
-    #         Mold = M_new 
-    #         gold = gnew
-    #         Vold = Vnew
+            rold = rnew
+            Mold = M_new 
+            gold = gnew
+            Vold = Vnew
 
-    #         p_k = -np.dot(Mold,gold.reshape(3*nat,1))
+            p_k = -np.dot(Mold,gold.reshape(3*nat,1))
 
-    #         count += 1
-
-
+            cycle += 1
 
 
-    #     else: #Condition is fulfilled
-    #         print(' ')
-    #         print('Optimization converged :)')
 
-    #         print(' ')
-    #         print(' ')
-    #         print(f'Final energy = {Vnew} kcal/mol')
-    #         print(' ')
-    #         print('Optimized geometry in Å: ')
-    #         print('------------------------')
-    #         print(rnew)
-    #         break
 
-        
-        
+        else: #Condition is fulfilled
+            end_time = time.time()
+
+            print(' ')
+            print('Optimization converged :)')
+
+            print(' ')
+            print(' ')
+            print(f'Final energy = {Vnew} kcal/mol')
+            print(' ')
+            print('Optimized geometry in Å: ')
+            print('------------------------')
+
+            for i in range(nat):    
+                print(atoms[i].element, rnew[i])
+            print(f'\n')
+
+            print(f'Elapsed time: {end_time - start_time:.4f} s')
+            break
+
+
+
+def internal_opt(bnd):
+
+    # Start by calculating potential energy contributions and total potential energy
+
+    vstretch = calc_vstretch(bond_list)
+    vbend = calc_vbend(angle_list)
+    vtors = calc_vtors(dihedral_list)
+    vvdw = calc_vvdw(vdw_list)
+    
+    #### Print potential energy contributions
+
+    V0 = getV(bnd)
+
+    print(' ')
+    print(f'Potential energy of input geometry = {V0}\n')
+    print('Contributions to total potential energy (in kcal/mol): \n')
+    print(f'Stretch: {vstretch} \t bend: {vbend} \t trosion: {vtors} \t VdW: {vvdw}')
+
+    # Get initial gradient matrix
+
+    g_initial = getgrad(bond_list,angle_list,dihedral_list,vdw_list)
+
 
     #################################################
     # Geometry optimization in internal coordinates #
     #################################################
-   
-   # First, build the B matrix
+
+    # First, build the B matrix
 
     B = Bmat(internal_read(bnd)[0],internal_read(bnd)[1],internal_read(bnd)[2])
 
@@ -1128,6 +1141,7 @@ if __name__ == '__main__':
     flag = True
 
     while flag: 
+        start_time = time.time()
         print(' ')
         print('#############################################')
         print(f'Geometry optimization: cycle number {cycle}')
@@ -1307,11 +1321,7 @@ if __name__ == '__main__':
         print(s_qk_new)
 
 
-        new_Mq = update_Hessian(M_q,s_qk_new,yq,vq)
-
-        print(' ')
-        print('Updated inverse Hessian Mq: \n')
-        print(new_Mq)
+        
 
 
         V = getV(bnd)
@@ -1322,18 +1332,28 @@ if __name__ == '__main__':
         rmse = np.sqrt(np.dot(gxk1.reshape((1,3*nat)),gxk1.reshape((3*nat,1))) / (3*nat))
         print(f'RMSE = {rmse}')
 
-        M_q = new_Mq
-        gq0 = gqk1
-
-        B = Bnew
-        q0 = qk1
-        inv_G = inv_Gnew
-        x0 = xj2
+        
+        
 
         if rmse >= 0.00001:
+
+            new_Mq = update_Hessian(M_q,s_qk_new,yq,vq)
+
+            print(' ')
+            print('Updated inverse Hessian Mq: \n')
+            print(new_Mq)
+            M_q = new_Mq
+
+            gq0 = gqk1
+            B = Bnew
+            q0 = qk1
+            inv_G = inv_Gnew
+            x0 = xj2
+
             cycle += 1
 
         else:
+            end_time  = time.time()
             flag = False
 
     print(' ')
@@ -1342,10 +1362,77 @@ if __name__ == '__main__':
     print(' ')
 
     print(f'Final energy = {V} kcal/mol \n')
-    print('Optimized geometry: ')
+    print('Optimized geometry in Å: ')
     for i in range(nat):    
         print(atoms[i].element, xj2.reshape((nat,3))[i])
 
+    print(f'Elapsed time: {end_time - start_time:.4f} s')
 
 
+
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
+
+
+
+if __name__ == '__main__':
+    
+    filename = input('Choose a .mol2 file: \n')  # Load molecule
+
+
+    # Next read  bonded atoms list, coordinates, element of each atom and number of atoms
+
+    bnd = read_file(filename)[0]
+    coord = read_file(filename)[1]
+    element = read_file(filename)[2]
+    nat = read_file(filename)[3]
+
+    # Assign values for each object in the class and append in a list
+
+    atoms = []
+    for i in range(len(coord)):
+        atoms.append(Atom(i+1,element[i],coord[i,0],coord[i,1],coord[i,2]))
+
+
+    # Get bonds,angles, dihedral angles and dispersive interactions
+
+    bond_list = bond_read(bnd)[1]
+    angle_list = angle_read(bnd)
+    dihedral_list = dihedral_read(angle_list)
+    vdw_list = vdw_read(angle_list,bnd)
+
+
+    internal_coordinates = len(bond_list)+len(angle_list)+len(dihedral_list)  #Number of total internal coordinates
+
+    print(f'Internal coordinates')
+    print('--------------------')  
+    print(f' Stretching : {len(bond_list)} \n Bending : {len(angle_list)} \n Torsion : {len(dihedral_list)} \n Total : {internal_coordinates}' )
+    print(' ')
+    print(f'Cartesian coordinates')
+    print('--------------------')
+    print(f' Total: {3*nat}\n')
+
+    
+    
+    while True:
+        print('Choose a method for geometry optimization:')
+        print('1) Optimization in cartesian coordinates') 
+        print('2) Optimization in internal coordinates')
+        print('3) Exit')
+        method = input()
+
+
+        if method == '1':
+            cartesian_opt(bond_list,angle_list,dihedral_list,vdw_list)
+            exit()
+
+        elif method == '2':
+            internal_opt(bnd)
+            exit()
+
+        elif method == '3':
+            exit()
+
+        else:
+            print('Not a valid option. Please, choose again.\n')
 
