@@ -39,7 +39,7 @@ def read_file(filename):
 
     nat = int(line[1:3])
     bonds = int(line[4:7])
-    print(f'This molecule has {nat} atoms and {bonds} bonds')
+    
     mol.close()
 
     # Load the coordinates (X,Y,Z) and the list of atoms for each position
@@ -188,8 +188,7 @@ def bond_read(bnd):
 
 
 
-    # for i in bond_list:
-    #     print(f'{i[0].element,i[0].id} - {i[1].element,i[1].id} \t Distance in Angstroms = {i[2]}')
+    
 
     return rab_vect,bond_list
 
@@ -242,9 +241,6 @@ def angle_read(bnd):
             elif vari[1] == varj[1]:  # Central atom in the second column
                 angle_list.append([atoms[vari[0]-1],atoms[vari[1]-1], atoms[varj[0]-1], angle(atoms[vari[0]-1],atoms[vari[1]-1], atoms[varj[0]-1])])
 
-
-    # for i in angle_list:
-    #     print(f'{i[0].element,i[0].id} - {i[1].element,i[1].id} - {i[2].element,i[2].id} \t Angle in radians = {i[3]}, angle in degrees = {i[3]*180/np.pi}')
 
     return angle_list
 
@@ -317,8 +313,7 @@ def dihedral_read(angle_list):
                 dihedral(atoms[vari[0].id-1],atoms[vari[1].id-1],atoms[vari[2].id-1],atoms[varj[0].id-1])])
             
 
-    # for i in dihedral_list:
-    #     print(f'{i[0].element,i[0].id} - {i[1].element,i[1].id} - {i[2].element,i[2].id} - {i[3].element,i[3].id} \t Angle in radians = {i[4]}, angle in degrees = {i[4]*180/np.pi}')
+    
     
     return dihedral_list
 
@@ -369,8 +364,7 @@ def vdw_read(angle_list,bnd):
                     connect_matrix[i][j] = energy
                     vdw_list.append([atoms[i],atoms[j],energy])
 
-    # for i in vdw_list:
-    #     print(f'{i[0].element,i[0].id} - {i[1].element,i[1].id} \t Van Der Waals energy (kcal/mol) = {i[2]}')
+    
 
     return vdw_list
 
@@ -906,6 +900,10 @@ def update_Hessian(Mq,sqk,yqk,vqk):
 
 def cartesian_opt(bond_list,angle_list,dihedral_list,vdw_list):
 
+    out2.write(f'Input geometry in Å: \n')
+    for i in range(nat):    
+                out2.write(f'{atoms[i].element}   [{coord[i][0]} {coord[i][1]} {coord[i][2]}] \n')    
+    out2.write(f'\n')
     # Start by calculating potential energy contributions and total potential energy
 
     vstretch = calc_vstretch(bond_list)
@@ -913,13 +911,14 @@ def cartesian_opt(bond_list,angle_list,dihedral_list,vdw_list):
     vtors = calc_vtors(dihedral_list)
     vvdw = calc_vvdw(vdw_list)
     
-    #### Print potential energy contributions
+   
 
     V0 = getV(bnd)
 
-    print(' ')
-    print(f'Potential energy of input geometry = {V0}')
-
+    out2.write(f'Contributions to potential energy: \n')
+    out2.write(f'Stretch = {np.sum(vstretch)} \t Bend = {np.sum(vbend)} \t Torsion = {np.sum(vtors)} \t VDW = {np.sum(vvdw)}\n')
+    out2.write(f'Potential energy of input geometry = {V0} kcal/mol \n')
+    out2.write(f'\n')
 
     # Get initial gradient matrix
 
@@ -953,24 +952,26 @@ def cartesian_opt(bond_list,angle_list,dihedral_list,vdw_list):
     cycle = 1 # Index
 
     while True:
-        start_time = time.time()
-        print(' ')
-        print('#############################################')
-        print(f'Geometry optimization: cycle number {cycle}')
-        print('#############################################')
+         
+        out2.write(f' \n')
+        out2.write(f'#############################################\n')
+        out2.write(f'  Geometry optimization: cycle number {cycle} \n')
+        out2.write(f'#############################################\n')
 
-        print(' ')
-        print('Initial geometry')
-        print('------------------------')
-        print(rold)
+        # out2.write(' \n')
+        # out2.write('Initial geometry')
+        # out2.write('------------------------')
+        # out2.write(rold)
 
-        print(' ')
-        print('Cartesian displacement')
-        print('------------------------')
-        print(p_k.reshape(nat,3))
+        out2.write(f'\n ')
+        out2.write(f'Cartesian displacement (p_k)\n')
+        out2.write(f'------------------------------\n')
+        out2.write(f'{p_k.reshape(nat,3)} \n')
 
+        out2.write(f' \n')
         alpha = linear_search(rold,p_k,atoms,gold,Vold) #Calculate alpha at each cycle
-        print(f'Linear search: alpha = {alpha}')
+        out2.write(f'Linear search ended \n') 
+        out2.write(f'alpha = {alpha} \n')
 
         Vnew = step(rold,alpha,p_k,atoms,bnd)[0]
         rnew = step(rold,alpha,p_k,atoms,bnd)[1]
@@ -979,8 +980,8 @@ def cartesian_opt(bond_list,angle_list,dihedral_list,vdw_list):
 
         bond = bond_read(bnd)[1]
         ang = angle_read(bnd)
-        dih = dihedral_read(angle_list)
-        vdw = vdw_read(angle_list,bnd)
+        dih = dihedral_read(ang)
+        vdw = vdw_read(ang,bnd)
 
         gnew = getgrad(bond,ang,dih,vdw)
         
@@ -988,20 +989,21 @@ def cartesian_opt(bond_list,angle_list,dihedral_list,vdw_list):
         grms = np.sqrt(np.dot(gnew.reshape((1,3*nat)),gnew.reshape((3*nat,1))) / (3*nat)) # Gradient root mean square. 
         
 
-        print(' ')
-        print(f'New set of coordinates')
-        print('------------------------')
-        print(rnew)
+        out2.write(' \n')
+        out2.write(f'New set of coordinates \n')
+        out2.write(f'------------------------\n')
+        out2.write(f'{rnew} \n')
 
         
-        print(' ')
-        print('Updated gradient')
-        print('------------------------')
-        print(gnew)
+        out2.write(' \n')
+        out2.write('Updated gradient \n')
+        out2.write('------------------------\n')
+        out2.write(f'{gnew} \n')
 
-        print(' ')
-        print(f'Energy difference = {Vnew-Vold} kcal/mol')       
-        print(f'Gradient root mean square deviation (GRMS) = {grms}')
+        out2.write(' \n')
+        out2.write(f'Energy difference = {Vnew-Vold} kcal/mol \n')       
+        out2.write(f'Gradient root mean square deviation (GRMS) = {grms} \n')
+        out2.write(f'\n')
 
 
 
@@ -1028,34 +1030,43 @@ def cartesian_opt(bond_list,angle_list,dihedral_list,vdw_list):
 
             p_k = -np.dot(Mold,gold.reshape(3*nat,1))
 
+            out2.write(f'Updated Hessian matrix \n')
+            out2.write(f'{Mold} \n')    #TODO Good print Hessian
+ 
             cycle += 1
 
 
 
 
         else: #Condition is fulfilled
-            end_time = time.time()
+            
 
-            print(' ')
-            print('Optimization converged :)')
+            out2.write(' \n')
+            out2.write('Optimization converged :) \n')
+            out2.write('------------------------ \n')
 
-            print(' ')
-            print(' ')
-            print(f'Final energy = {Vnew} kcal/mol')
-            print(' ')
-            print('Optimized geometry in Å: ')
-            print('------------------------')
+            out2.write(' \n')
+            out2.write(' \n')
+            out2.write(f'Final energy = {Vnew:.6f} kcal/mol \n')
+            out2.write(' \n')
+            out2.write('Optimized geometry in Å: \n')
+            out2.write('------------------------\n')
 
             for i in range(nat):    
-                print(atoms[i].element, rnew[i])
-            print(f'\n')
+                out2.write(f'{atoms[i].element}   [{rnew[i][0]:.6f} {rnew[i][1]:.6f} {rnew[i][2]:.6f}] \n')
+            out2.write(f'\n')
 
-            print(f'Elapsed time: {end_time - start_time:.4f} s')
             break
 
 
 
 def internal_opt(bnd):
+    #TODO Standarize arrays
+
+    out3.write(f'Input geometry in Å: \n')
+    for i in range(nat):    
+                out3.write(f'{atoms[i].element}   [{coord[i][0]} {coord[i][1]} {coord[i][2]}] \n')   
+    out3.write(f'\n')
 
     # Start by calculating potential energy contributions and total potential energy
 
@@ -1064,14 +1075,15 @@ def internal_opt(bnd):
     vtors = calc_vtors(dihedral_list)
     vvdw = calc_vvdw(vdw_list)
     
-    #### Print potential energy contributions
+    
 
     V0 = getV(bnd)
 
-    print(' ')
-    print(f'Potential energy of input geometry = {V0}\n')
-    print('Contributions to total potential energy (in kcal/mol): \n')
-    print(f'Stretch: {vstretch} \t bend: {vbend} \t trosion: {vtors} \t VdW: {vvdw}')
+    out3.write(' \n')
+    out3.write('Contributions to total potential energy (in kcal/mol): \n')
+    out3.write(f'Stretch = {np.sum(vstretch):.6f} \t Bend = {np.sum(vbend):.6f} \t Torsion = {np.sum(vtors):.6f} \t VDW = {np.sum(vvdw):.6f}\n')
+
+    out3.write(f'Potential energy of input geometry = {V0:.6f} kcal/mol \n')
 
     # Get initial gradient matrix
 
@@ -1086,17 +1098,17 @@ def internal_opt(bnd):
 
     B = Bmat(internal_read(bnd)[0],internal_read(bnd)[1],internal_read(bnd)[2])
 
-    print(' ')
-    print('Wilson B matrix: \n') 
-    print(B)
+    out3.write(' \n')
+    out3.write('Wilson B matrix: \n') 
+    out3.write(f'{B}\n')
 
     # Now, obtain the G matrix as G=B*B^T
 
     inv_G = inverse_G(B)
 
-    print(' ')
-    print('Inverse G matrix')
-    print(inv_G)
+    out3.write(' \n')
+    out3.write('Inverse G matrix\n')
+    out3.write(f'{inv_G}\n')
 
     # With the Wilson B matrix and the inverse of G, we can obtain the gradient in internal coordinates as gq = G^-*B*gx
 
@@ -1104,18 +1116,18 @@ def internal_opt(bnd):
 
     gq0 = np.dot(inv_G, np.dot(B,gx))
 
-    print(' ')
-    print('Gradient wrt internal coordinates')
-    print(gq0.reshape((1,internal_coordinates)))
+    out3.write(' \n')
+    out3.write('Gradient wrt internal coordinates\n')
+    out3.write(f'{gq0.reshape((1,internal_coordinates))}\n')
 
 
     # Internal coordinates system
 
 
     q0 = internal_read(bnd)[3]
-    print(' ')
-    print('Internal coordinates: \n')
-    print(q0)
+    out3.write(' \n')
+    out3.write('Internal coordinates: \n')
+    out3.write(f'{q0} \n')
 
 
 
@@ -1142,10 +1154,10 @@ def internal_opt(bnd):
 
     while flag: 
         start_time = time.time()
-        print(' ')
-        print('#############################################')
-        print(f'Geometry optimization: cycle number {cycle}')
-        print('#############################################')
+        out3.write(' \n')
+        out3.write('#############################################\n')
+        out3.write(f'  Geometry optimization: cycle number {cycle}\n')
+        out3.write('#############################################\n')
 
 
         # Initial direction of max displacement
@@ -1157,35 +1169,38 @@ def internal_opt(bnd):
         rmax = 0.02
 
         rms = np.sqrt(np.dot(p_q.T,p_q)/internal_coordinates)
-        print(' ')
-        print('Predicted displacement: \n')
-        print(p_q.reshape((1,internal_coordinates)))
-        print(' ')
+        out3.write(' \n')
+        out3.write('Predicted displacement: \n')
+        out3.write(f'{p_q.reshape((1,internal_coordinates))}\n')
+        out3.write(' \n')
 
 
         if rms >= rmax:
-            print('RMS is too high. Rescaling: \n')
+            out3.write('RMS is too high. Rescaling: \n')
             scaling = np.sqrt((0.02**2)*internal_coordinates / np.dot(p_q.T,p_q)) # Scaling factor so that rms = 0.02
             p_q *= scaling 
         
-        print('Scaled step: \n')
-        print(p_q.reshape((1,internal_coordinates)))
+        out3.write(' \n')
+        out3.write('Scaled step: \n')
+        out3.write(f'{p_q.reshape((1,internal_coordinates))}\n')
 
         # Update internal coordinates
 
         qk = q0 + p_q.reshape((1,internal_coordinates))
         
-        print(' ')
-        print('Updated set of internal coordinates: \n')
-        print(qk)
+        out3.write(' \n')
+        out3.write('Updated set of internal coordinates: \n')
+        out3.write(f'{qk} \n')
 
 
         # Search for updated cartesian coordinates
 
-        print(' ')
-        print('Search for optimally updated cartesian coordinates')
+        out3.write(' \n')
+        out3.write('Search for optimally updated cartesian coordinates \n')
         s_qk = qk - q0 #desired change
-        print(s_qk)
+        out3.write(' \n')
+        out3.write('Change in internal coordinates (s_qk)')
+        out3.write(f'{s_qk} \n')
 
         for i in range(len(bond_list) + len(angle_list), len(bond_list)+len(angle_list)+len(dihedral_list)):
             if np.abs(s_qk[0][i]) >= math.pi:
@@ -1208,9 +1223,9 @@ def internal_opt(bnd):
         while displacement > diff:
 
             iter+=1
-            print(' \n')
-            print(f'Starting iteration number {iter}')
-            print('----------------------------')
+            out3.write(' \n')
+            out3.write(f'Starting iteration number {iter}\n')
+            out3.write('----------------------------\n')
             
             
 
@@ -1223,12 +1238,12 @@ def internal_opt(bnd):
 
             qk1 = internal_read(bnd)[3]
 
-            print(' ')
-            print('New set of internals: \n')
-            print(qk1)
+            out3.write(' \n')
+            out3.write('New set of internals: \n')
+            out3.write(f'{qk1} \n')
 
-            print(' ')
-            print('Difference between internals: \n')
+            out3.write(' \n')
+            out3.write('Difference between desired and new internals (s_qk^j+1): \n')
             s_qk1 = qk-qk1
             for i in range(len(bond_list) + len(angle_list),len(bond_list)+len(angle_list)+len(dihedral_list)):  # Check dihedral errors
                 if np.abs(s_qk1[0][i]) >= math.pi:
@@ -1236,31 +1251,32 @@ def internal_opt(bnd):
                         s_qk1[0][i] += 2*math.pi
                     elif s_qk1[0][i] > 0:
                         s_qk1[0][i] -= 2*math.pi
-            print(s_qk1)
+            out3.write(f'{s_qk1} \n')
 
             # Calculate new set of cartesians
 
             xj2 = xj1 + np.dot(B.T, np.dot(inv_G, s_qk1.T))
 
-            print(' ')
-            print('New set of cartesians: \n')       
-            print(xj2.T)
+            out3.write(' \n')
+            out3.write('New set of cartesians (x_k+1^j): \n')       
+            out3.write(f'{xj2.T} \n')
 
-            print(' ')
-            print('Maximum cartesian displacement: \n')
+            out3.write(' \n')
+            out3.write('Maximum cartesian displacement: \n')
             displacement = max(np.abs(xj2-xj1))
-            print(displacement)
+            out3.write(f'{displacement} \n')
 
             xj1 = xj2
 
-        print(' ')
-        print('Optimal cartesians found! \n')
+        out3.write(' \n')
+        out3.write('Optimal cartesians found! \n')
+        out3.write('-------------------------- \n')
 
-        print(' ')
-        print('Updated set of cartesian coordinates: \n') 
+        out3.write(' \n')
+        out3.write('Updated set of cartesian coordinates: \n') 
         
         for i in range(nat):    
-            print(atoms[i].element, xj2.reshape((nat,3))[i])
+            out3.write(f'{atoms[i].element} {xj2.reshape((nat,3))[i]} \n')
 
         for i in range(len(atoms)):  # Update objects
             atoms[i].x = xj2.reshape((nat,3))[i,0]
@@ -1270,22 +1286,22 @@ def internal_opt(bnd):
 
         qk1 = internal_read(bnd)[3]
 
-        print(' ')
-        print('Updated set of internal coordinates: \n') 
-        print(qk1)
+        out3.write(' \n')
+        out3.write('New set of internal coordinates: \n') 
+        out3.write(f'{qk1} \n')
 
 
         # Update Wilson B matrix
 
         Bnew = Bmat(internal_read(bnd)[0],internal_read(bnd)[1],internal_read(bnd)[2])
-        print(' ')
-        print('Updated Wilson B matrix: \n') 
-        print(Bnew)
+        out3.write(' \n')
+        out3.write('Updated Wilson B matrix: \n') 
+        out3.write(f'{Bnew} \n')
 
         inv_Gnew = inverse_G(Bnew)
-        print(' ')
-        print('Updated inverse G matrix: \n')
-        print(inv_Gnew)
+        out3.write(' \n')
+        out3.write('Updated inverse G matrix: \n')
+        out3.write(f'{inv_Gnew} \n')
 
         # Obtain gradient wrt internal coords
 
@@ -1293,21 +1309,21 @@ def internal_opt(bnd):
         gqk1 = np.dot(inv_Gnew,np.dot(Bnew,gxk1.reshape((3*nat,1))))
 
         
-        print(' ')
-        print('Gradient of internal coordinates: \n')
-        print(gqk1.T)
+        out3.write(' \n')
+        out3.write('Gradient of internal coordinates: \n')
+        out3.write(f'{gqk1.T} \n')
 
         yq = gqk1 - gq0
         vq = np.dot(M_q,yq)
 
-        print(' ')
-        print('Vector yq \n')
-        print(yq)
+        # out3.write(' ')
+        # out3.write('Vector yq \n')
+        # out3.write(yq)
         
 
-        print(' ')
-        print('Vector vq:')
-        print(vq)
+        # out3.write(' ')
+        # out3.write('Vector vq:')
+        # out3.write(vq)
 
         s_qk_new = np.array(qk1) - np.array(q0)
         for i in range(len(bond_list) + len(angle_list),len(bond_list)+len(angle_list)+len(dihedral_list)):  # Check dihedral errors
@@ -1316,21 +1332,18 @@ def internal_opt(bnd):
                         s_qk_new[i] += 2*math.pi
                     elif s_qk_new[i] > 0:
                         s_qk_new[i] -= 2*math.pi
-        print(' ')
-        print('Vector sq:')
-        print(s_qk_new)
-
-
-        
+        # out3.write(' ')
+        # out3.write('Vector sq:')
+        # out3.write(s_qk_new)
 
 
         V = getV(bnd)
 
-        print(' ')
-        print(f'Old energy = {V0} \t New energy = {V}')
+        out3.write(' \n')
+        out3.write(f'Old energy = {V0:.6f} kcal/mol \t New energy = {V:.6f} kcal/mol \n')
         
         rmse = np.sqrt(np.dot(gxk1.reshape((1,3*nat)),gxk1.reshape((3*nat,1))) / (3*nat))
-        print(f'RMSE = {rmse}')
+        out3.write(f'RMSE = {rmse} \n')
 
         
         
@@ -1339,9 +1352,10 @@ def internal_opt(bnd):
 
             new_Mq = update_Hessian(M_q,s_qk_new,yq,vq)
 
-            print(' ')
-            print('Updated inverse Hessian Mq: \n')
-            print(new_Mq)
+            out3.write(' \n')
+            out3.write('Updated inverse Hessian Mq: \n')
+            out3.write(f'{new_Mq} \n')
+
             M_q = new_Mq
 
             gq0 = gqk1
@@ -1356,17 +1370,18 @@ def internal_opt(bnd):
             end_time  = time.time()
             flag = False
 
-    print(' ')
-    print('Optimization converged :)')
-    print('------------------------')
-    print(' ')
+    out3.write(' \n')
+    out3.write('Optimization converged :) \n')
+    out3.write('------------------------ \n')
+    out3.write(' \n')
 
-    print(f'Final energy = {V} kcal/mol \n')
-    print('Optimized geometry in Å: ')
+    out3.write(f'Final energy = {V:.6f} kcal/mol \n')
+    out3.write(' \n')
+    out3.write('Optimized geometry in Å: \n')
     for i in range(nat):    
-        print(atoms[i].element, xj2.reshape((nat,3))[i])
+        out3.write(f'{atoms[i].element} {xj2.reshape((nat,3))[i]} \n')
 
-    print(f'Elapsed time: {end_time - start_time:.4f} s')
+    out3.write(f'Elapsed time: {end_time - start_time:.4f} s \n')
 
 
 
@@ -1379,13 +1394,17 @@ if __name__ == '__main__':
     
     filename = input('Choose a .mol2 file: \n')  # Load molecule
 
-
+    out1 = open("molecule_specifications.out",mode='w') 
+    
     # Next read  bonded atoms list, coordinates, element of each atom and number of atoms
 
     bnd = read_file(filename)[0]
     coord = read_file(filename)[1]
     element = read_file(filename)[2]
     nat = read_file(filename)[3]
+
+    out1.write(f'This molecule has {nat} atoms and {len(bnd)} bonds \n')
+    out1.write(f' \n')
 
     # Assign values for each object in the class and append in a list
 
@@ -1396,23 +1415,47 @@ if __name__ == '__main__':
 
     # Get bonds,angles, dihedral angles and dispersive interactions
 
+    out1.write(f'List of bonds\n')
+    out1.write(f'--------------\n') 
     bond_list = bond_read(bnd)[1]
+    for i in bond_list:
+        out1.write(f'{i[0].element,i[0].id} - {i[1].element,i[1].id} \t Distance in Angstroms = {i[2]} \n')
+
+    out1.write(f' \n')
+    out1.write(f'List of angles\n')
+    out1.write(f'---------------\n') 
     angle_list = angle_read(bnd)
+    for i in angle_list:
+        out1.write(f'{i[0].element,i[0].id} - {i[1].element,i[1].id} - {i[2].element,i[2].id} \t Angle in radians = {i[3]}, angle in degrees = {i[3]*180/np.pi} \n')
+
+    out1.write(f' \n')
+    out1.write(f'List of dihedral angles \n')  
+    out1.write(f'-------------------------\n') 
     dihedral_list = dihedral_read(angle_list)
+    for i in dihedral_list:
+        out1.write(f'{i[0].element,i[0].id} - {i[1].element,i[1].id} - {i[2].element,i[2].id} - {i[3].element,i[3].id} \t Angle in radians = {i[4]}, angle in degrees = {i[4]*180/np.pi} \n')
+
+    out1.write(f' \n')
+    out1.write(f'List of pair-wise long-range interactions \n')
+    out1.write(f'-------------------------------------------\n') 
     vdw_list = vdw_read(angle_list,bnd)
+    for i in vdw_list:
+        out1.write(f'{i[0].element,i[0].id} - {i[1].element,i[1].id} \t Van Der Waals energy (kcal/mol) = {i[2]} \n')
+
+    out1.write(f' \n')
 
 
     internal_coordinates = len(bond_list)+len(angle_list)+len(dihedral_list)  #Number of total internal coordinates
 
-    print(f'Internal coordinates')
-    print('--------------------')  
-    print(f' Stretching : {len(bond_list)} \n Bending : {len(angle_list)} \n Torsion : {len(dihedral_list)} \n Total : {internal_coordinates}' )
-    print(' ')
-    print(f'Cartesian coordinates')
-    print('--------------------')
-    print(f' Total: {3*nat}\n')
+    out1.write(f'Internal coordinates\n')
+    out1.write(f'--------------------\n')  
+    out1.write(f' Stretching : {len(bond_list)} \n Bending : {len(angle_list)} \n Torsion : {len(dihedral_list)} \n Total : {internal_coordinates}\n' )
+    out1.write(f' \n')
+    out1.write(f'Cartesian coordinates\n')
+    out1.write(f'--------------------\n')
+    out1.write(f' Total: {3*nat}\n')
 
-    
+    out1.close()
     
     while True:
         print('Choose a method for geometry optimization:')
@@ -1423,11 +1466,27 @@ if __name__ == '__main__':
 
 
         if method == '1':
+            out2 = open('Geometry_opt_cartesian.out', mode='w')
+            start_time = time.time()
             cartesian_opt(bond_list,angle_list,dihedral_list,vdw_list)
+            end_time = time.time()
+            out2.write(f'Elapsed time: {end_time - start_time:.4f} s \n')
+            out2.close()
+
+            
+            print('Optimization done! Information has been written in output files')
             exit()
 
         elif method == '2':
+            out3 = open('Geometry_opt_internal.out', mode='w')
+            start_time = time.time()
             internal_opt(bnd)
+            end_time = time.time()
+            out3.write(f'Elapsed time: {end_time - start_time:.4f} s \n')
+            out3.close()
+
+            
+            print('Optimization done! Information has been written in output files')
             exit()
 
         elif method == '3':
